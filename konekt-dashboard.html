@@ -615,18 +615,18 @@ body {
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Messages Today</div>
-          <div class="stat-value">0</div>
-          <div class="stat-sub">Activate agent to start</div>
+          <div class="stat-value" id="stat-messages">—</div>
+          <div class="stat-sub">Incoming + outgoing</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Leads Captured</div>
-          <div class="stat-value">0</div>
-          <div class="stat-sub">This month</div>
+          <div class="stat-value" id="stat-leads">—</div>
+          <div class="stat-sub">Unique customers</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Response Rate</div>
-          <div class="stat-value">—</div>
-          <div class="stat-sub">No data yet</div>
+          <div class="stat-label">Total Conversations</div>
+          <div class="stat-value" id="stat-convs">—</div>
+          <div class="stat-sub">All time</div>
         </div>
       </div>
 
@@ -675,6 +675,25 @@ body {
             </div>
           </div>
           <div id="messages-list" style="display:none;flex:1;overflow-y:auto;padding:16px;flex-direction:column;gap:6px;"></div>
+          <!-- SEND MESSAGE BAR -->
+          <div id="chat-input-bar" style="display:none;padding:12px 16px;background:var(--white);border-top:1px solid var(--border);align-items:center;gap:10px;">
+            <input id="msg-input" type="text" placeholder="Type a message..."
+              style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:24px;
+                     font-size:13px;font-family:inherit;outline:none;background:var(--bg);
+                     transition:border-color 0.15s;"
+              onfocus="this.style.borderColor='var(--g)'"
+              onblur="this.style.borderColor='var(--border)'" />
+            <button id="send-btn" onclick="sendMessage()"
+              style="width:40px;height:40px;background:var(--g);border:none;border-radius:50%;
+                     cursor:pointer;display:flex;align-items:center;justify-content:center;
+                     flex-shrink:0;transition:background 0.15s;"
+              onmouseover="this.style.background='var(--gd)'"
+              onmouseout="this.style.background='var(--g)'">
+              <svg width="18" height="18" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -722,19 +741,12 @@ body {
 </div>
 
 <script>
-// ═══ CONFIG ═══
-const SUPABASE_URL = 'https://ubpsitiwpvgzqxayjdvq.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicHNpdGl3cHZnenF4YXlqZHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMTkxMTIsImV4cCI6MjA5MTg5NTExMn0.pAP4IZJjLZrMs8uhYw0ZNjrNDM7TsaZk7IfC-970908';
-
-const SB = (url, opts = {}) => fetch(SUPABASE_URL + url, {
-  ...opts,
-  headers: {
-    'apikey': SUPABASE_KEY,
-    'Authorization': `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/json',
-    ...(opts.headers || {})
-  }
-});
+// ═══ N8N WEBHOOK CONFIG ═══
+const N8N = {
+  messages:      'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-messages',
+  conversations: 'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-conversations',
+  stats:         'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-stats'
+};
 
 // ═══ AUTH ═══
 let currentUser = null;
@@ -749,29 +761,39 @@ window.addEventListener('load', async () => {
   document.getElementById('sidebar-name').textContent = name;
   document.getElementById('sidebar-avatar').textContent = name.charAt(0).toUpperCase();
 
-  try {
-    const res = await SB(`/rest/v1/users?email=eq.${currentUser.email}&select=*`);
-    const data = await res.json();
-    if (data && data[0]) {
-      const user = data[0];
-      currentUser = { ...currentUser, ...user };
-      localStorage.setItem('konekt_user', JSON.stringify(currentUser));
-      if (!user.plan) {
-        document.getElementById('pricing-overlay').classList.remove('hidden');
-        document.getElementById('sidebar-plan').textContent = 'Free Plan';
-        document.getElementById('plan-badge').textContent = 'FREE';
-        document.getElementById('plan-badge').className = 'badge-plan badge-free';
-      } else {
-        document.getElementById('sidebar-plan').textContent = 'AI Agent Plan';
-        document.getElementById('plan-badge').textContent = 'PRO';
-        document.getElementById('plan-badge').className = 'badge-plan badge-pro';
-        document.querySelector('.welcome-cta').style.display = 'none';
-      }
-    }
-  } catch(e) {
-    if (!currentUser.plan) document.getElementById('pricing-overlay').classList.remove('hidden');
+  // Plan badge from localStorage
+  if (currentUser.plan) {
+    document.getElementById('sidebar-plan').textContent = 'AI Agent Plan';
+    document.getElementById('plan-badge').textContent = 'PRO';
+    document.getElementById('plan-badge').className = 'badge-plan badge-pro';
+    document.querySelector('.welcome-cta').style.display = 'none';
+  } else {
+    document.getElementById('pricing-overlay').classList.remove('hidden');
+    document.getElementById('sidebar-plan').textContent = 'Free Plan';
+    document.getElementById('plan-badge').textContent = 'FREE';
+    document.getElementById('plan-badge').className = 'badge-plan badge-free';
   }
+
+  // Load dashboard stats on page load
+  loadStats();
 });
+
+// ═══ LOAD STATS ═══
+async function loadStats() {
+  try {
+    const res = await fetch(N8N.stats);
+    const data = await res.json();
+
+    // n8n wraps in array sometimes
+    const stats = Array.isArray(data) ? data[0] : data;
+
+    document.getElementById('stat-messages').textContent = stats.messages_today ?? '0';
+    document.getElementById('stat-leads').textContent = stats.leads_captured ?? '0';
+    document.getElementById('stat-convs').textContent = stats.total_conversations ?? '—';
+  } catch(e) {
+    console.warn('Stats load failed', e);
+  }
+}
 
 // ═══ NAVIGATION ═══
 function showScreen(name) {
@@ -813,26 +835,34 @@ let lastConvSnapshot = '';
 // ═══ POLLING ═══
 function startInboxPolling() {
   if (inboxPollTimer) clearInterval(inboxPollTimer);
-  inboxPollTimer = setInterval(() => loadConversations(true), 1500);
+  inboxPollTimer = setInterval(() => loadConversations(true), 4000);
 }
 function stopInboxPolling() { clearInterval(inboxPollTimer); inboxPollTimer = null; }
 
 function startMsgPolling(phone) {
   if (msgPollTimer) clearInterval(msgPollTimer);
-  msgPollTimer = setInterval(() => loadMessages(phone, true), 1500);
+  msgPollTimer = setInterval(() => loadMessages(phone, true), 4000);
 }
 function stopMsgPolling() { clearInterval(msgPollTimer); msgPollTimer = null; }
 
 // ═══ LOAD CONVERSATIONS ═══
 async function loadConversations(silent = false) {
   try {
-    const res = await SB(`/rest/v1/conversations?select=*&order=last_message_time.desc&customer_phone=not.is.null`);
-    const data = await res.json();
+    const res = await fetch(N8N.conversations);
+    const raw = await res.json();
 
-    // Deduplicate by phone, keep latest timestamp (already sorted desc)
+    // n8n wraps data: { conversations: [...] } or direct array
+    let data = raw;
+    if (!Array.isArray(raw)) {
+      const inner = Array.isArray(raw) ? raw : (raw[0] || raw);
+      data = inner.conversations || inner.json?.conversations || [];
+    }
+    if (!Array.isArray(data)) data = [];
+
+    // Deduplicate by phone
     const seen = {};
     const fresh = data.filter(c => {
-      if (seen[c.customer_phone]) return false;
+      if (!c.customer_phone || seen[c.customer_phone]) return false;
       seen[c.customer_phone] = true;
       return true;
     });
@@ -847,7 +877,7 @@ async function loadConversations(silent = false) {
     renderContacts(fresh);
   } catch(e) {
     if (!silent) document.getElementById('contacts-list').innerHTML =
-      '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load.</div>';
+      '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load conversations.</div>';
   }
 }
 
@@ -921,6 +951,7 @@ async function openConversation(id, name, phone) {
 
   document.getElementById('chat-empty').style.display = 'none';
   document.getElementById('chat-header').style.display = 'flex';
+  document.getElementById('chat-input-bar').style.display = 'flex';
   const ml = document.getElementById('messages-list');
   ml.style.display = 'flex';
   ml.style.flexDirection = 'column';
@@ -929,17 +960,10 @@ async function openConversation(id, name, phone) {
   document.getElementById('chat-phone').textContent = '+' + phone;
   document.getElementById('chat-avatar').textContent = (name || phone).charAt(0).toUpperCase();
 
-  // Mark read immediately in UI
+  // Mark read in UI
   const conv = allConversations.find(c => c.id === id);
   if (conv) conv.unread_count = 0;
   renderContacts(allConversations);
-
-  // Mark read in Supabase (fire and forget)
-  SB(`/rest/v1/conversations?id=eq.${id}`, {
-    method: 'PATCH',
-    headers: { 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ unread_count: 0, is_read: true })
-  }).catch(() => {});
 
   await loadMessages(phone, false);
   startMsgPolling(phone);
@@ -953,8 +977,20 @@ async function loadMessages(phone, silent = false) {
   }
 
   try {
-    const res = await SB(`/rest/v1/messages?customer_phone=eq.${phone}&order=timestamp.asc`);
-    const messages = await res.json();
+    const res = await fetch(`${N8N.messages}?phone=${phone}`);
+    const raw = await res.json();
+
+    // Handle n8n response shape: [{json:{messages:[...]}}] or {messages:[...]} or [...]
+    let messages = [];
+    if (Array.isArray(raw)) {
+      const first = raw[0];
+      if (first?.json?.messages) messages = first.json.messages;
+      else if (first?.messages) messages = first.messages;
+      else if (first?.content) messages = raw; // direct array of messages
+      else messages = raw;
+    } else if (raw?.messages) {
+      messages = raw.messages;
+    }
 
     const latest = messages.length ? messages[messages.length - 1].timestamp : null;
     if (silent && latest === lastMsgTimestamp) return;
@@ -990,6 +1026,56 @@ async function loadMessages(phone, silent = false) {
     if (!silent) ml.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Could not load messages.</div>';
   }
 }
+
+// ═══ SEND MESSAGE ═══
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text || !activePhone) return;
+
+  input.value = '';
+  input.disabled = true;
+  document.getElementById('send-btn').disabled = true;
+
+  // Optimistic UI — show immediately
+  const ml = document.getElementById('messages-list');
+  const tempId = 'temp-' + Date.now();
+  const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  ml.innerHTML += `
+    <div id="${tempId}" style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+      <div style="max-width:65%;background:#dcf8c6;border-radius:8px 0 8px 8px;
+                  padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
+        <div style="font-size:13px;color:#0a1a14;line-height:1.5;word-break:break-word;">${text}</div>
+        <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px;">
+          ${now} <span style="color:#53bdeb;">✓✓</span>
+        </div>
+      </div>
+    </div>`;
+  ml.scrollTop = ml.scrollHeight;
+
+  try {
+    await fetch(N8N.messages, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: activePhone, message: text, sender: 'agent' })
+    });
+  } catch(e) {
+    // Remove optimistic message on fail
+    document.getElementById(tempId)?.remove();
+    alert('Message send failed. Please try again.');
+  }
+
+  input.disabled = false;
+  document.getElementById('send-btn').disabled = false;
+  input.focus();
+}
+
+// Enter key to send
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('msg-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+});
 </script>
 </body>
 </html>
