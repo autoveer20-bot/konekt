@@ -726,43 +726,37 @@ body {
 const SUPABASE_URL = 'https://ubpsitiwpvgzqxayjdvq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicHNpdGl3cHZnenF4YXlqZHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMTkxMTIsImV4cCI6MjA5MTg5NTExMn0.pAP4IZJjLZrMs8uhYw0ZNjrNDM7TsaZk7IfC-970908';
 
-// ═══ AUTH CHECK ═══
+const SB = (url, opts = {}) => fetch(SUPABASE_URL + url, {
+  ...opts,
+  headers: {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    ...(opts.headers || {})
+  }
+});
+
+// ═══ AUTH ═══
 let currentUser = null;
 
 window.addEventListener('load', async () => {
   const stored = localStorage.getItem('konekt_user');
-  if (!stored) {
-    window.location.href = 'auth.html';
-    return;
-  }
-
+  if (!stored) { window.location.href = 'auth.html'; return; }
   currentUser = JSON.parse(stored);
 
-  // Set UI
   const name = currentUser.name || 'User';
-  const firstName = name.split(' ')[0];
-
-  document.getElementById('welcome-name').textContent = `Welcome to Konekt, ${firstName}!`;
+  document.getElementById('welcome-name').textContent = `Welcome to Konekt, ${name.split(' ')[0]}!`;
   document.getElementById('sidebar-name').textContent = name;
   document.getElementById('sidebar-avatar').textContent = name.charAt(0).toUpperCase();
 
-  // Fetch latest user data from Supabase
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?email=eq.${currentUser.email}&select=*`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
-    });
+    const res = await SB(`/rest/v1/users?email=eq.${currentUser.email}&select=*`);
     const data = await res.json();
     if (data && data[0]) {
       const user = data[0];
       currentUser = { ...currentUser, ...user };
       localStorage.setItem('konekt_user', JSON.stringify(currentUser));
-
-      // Check plan
       if (!user.plan) {
-        // No plan — show pricing popup
         document.getElementById('pricing-overlay').classList.remove('hidden');
         document.getElementById('sidebar-plan').textContent = 'Free Plan';
         document.getElementById('plan-badge').textContent = 'FREE';
@@ -771,16 +765,11 @@ window.addEventListener('load', async () => {
         document.getElementById('sidebar-plan').textContent = 'AI Agent Plan';
         document.getElementById('plan-badge').textContent = 'PRO';
         document.getElementById('plan-badge').className = 'badge-plan badge-pro';
-        // Hide Activate AI Agent CTA
         document.querySelector('.welcome-cta').style.display = 'none';
       }
     }
   } catch(e) {
-    console.log('Could not fetch user data');
-    // Still show pricing if no plan in stored data
-    if (!currentUser.plan) {
-      document.getElementById('pricing-overlay').classList.remove('hidden');
-    }
+    if (!currentUser.plan) document.getElementById('pricing-overlay').classList.remove('hidden');
   }
 });
 
@@ -788,58 +777,59 @@ window.addEventListener('load', async () => {
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-
   document.getElementById('screen-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
-
   const titles = { dashboard: 'Dashboard', inbox: 'Inbox', billing: 'Billing & Plans' };
   document.getElementById('topbar-title').textContent = titles[name] || name;
-
   if (name === 'inbox') {
     loadConversations();
     startInboxPolling();
   } else {
     stopInboxPolling();
-    stopConversationPolling();
+    stopMsgPolling();
   }
 }
 
-// ═══ PRICING ACTIONS ═══
-function skipPricing() {
-  document.getElementById('pricing-overlay').classList.add('hidden');
-}
-
+// ═══ PRICING ═══
+function skipPricing() { document.getElementById('pricing-overlay').classList.add('hidden'); }
 function buyPlan() {
   document.getElementById('pricing-overlay').classList.add('hidden');
   window.open('https://wa.me/919958044308?text=Hi%20Konekt%2C%20I%20want%20to%20buy%20the%20AI%20Agent%20plan%20at%20%E2%82%B9999%2Fmonth.', '_blank');
 }
-
 function contactConsultant() {
   window.open('https://wa.me/919958044308?text=Hi%20Konekt%2C%20I%20want%20to%20buy%20the%20AI%20Agent%20plan%20at%20%E2%82%B9999%2Fmonth.', '_blank');
 }
+function logout() { localStorage.removeItem('konekt_user'); window.location.href = 'auth.html'; }
 
-// ═══ LOGOUT ═══
-function logout() {
-  localStorage.removeItem('konekt_user');
-  window.location.href = 'auth.html';
-}
-
-// ═══ INBOX ═══
+// ═══ INBOX STATE ═══
 let allConversations = [];
-let activeConversationPhone = null;
-let activeConversationName = null;
-let activeConversationId = null;
-let conversationPollTimer = null;
+let activePhone = null;
+let activeId = null;
 let inboxPollTimer = null;
-let lastMessageCount = 0;
-let lastConversationCount = 0;
+let msgPollTimer = null;
+let lastMsgTimestamp = null;
+let lastConvSnapshot = '';
 
+// ═══ POLLING ═══
+function startInboxPolling() {
+  if (inboxPollTimer) clearInterval(inboxPollTimer);
+  inboxPollTimer = setInterval(() => loadConversations(true), 1500);
+}
+function stopInboxPolling() { clearInterval(inboxPollTimer); inboxPollTimer = null; }
+
+function startMsgPolling(phone) {
+  if (msgPollTimer) clearInterval(msgPollTimer);
+  msgPollTimer = setInterval(() => loadMessages(phone, true), 1500);
+}
+function stopMsgPolling() { clearInterval(msgPollTimer); msgPollTimer = null; }
+
+// ═══ LOAD CONVERSATIONS ═══
 async function loadConversations(silent = false) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=*&order=last_message_time.desc&customer_phone=not.is.null`, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
-    });
+    const res = await SB(`/rest/v1/conversations?select=*&order=last_message_time.desc&customer_phone=not.is.null`);
     const data = await res.json();
+
+    // Deduplicate by phone, keep latest timestamp (already sorted desc)
     const seen = {};
     const fresh = data.filter(c => {
       if (seen[c.customer_phone]) return false;
@@ -847,127 +837,158 @@ async function loadConversations(silent = false) {
       return true;
     });
 
-    // Only re-render if data changed
-    if (!silent || JSON.stringify(fresh) !== JSON.stringify(allConversations)) {
-      allConversations = fresh;
-      renderContacts(allConversations);
-    }
+    const snapshot = JSON.stringify(fresh.map(c => ({
+      id: c.id, last: c.last_message_time, unread: c.unread_count, msg: c.last_message
+    })));
+    if (silent && snapshot === lastConvSnapshot) return;
+    lastConvSnapshot = snapshot;
+
+    allConversations = fresh;
+    renderContacts(fresh);
   } catch(e) {
-    if (!silent) document.getElementById('contacts-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load.</div>';
+    if (!silent) document.getElementById('contacts-list').innerHTML =
+      '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load.</div>';
   }
 }
 
-function startInboxPolling() {
-  if (inboxPollTimer) clearInterval(inboxPollTimer);
-  inboxPollTimer = setInterval(() => loadConversations(true), 1000);
-}
-
-function stopInboxPolling() {
-  if (inboxPollTimer) clearInterval(inboxPollTimer);
-  inboxPollTimer = null;
-}
-
+// ═══ RENDER CONTACTS ═══
 function renderContacts(conversations) {
   const list = document.getElementById('contacts-list');
-  if (!conversations || !conversations.length) {
+  if (!conversations.length) {
     list.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;">No conversations yet.<br><br>Messages will appear here once customers contact you on WhatsApp.</div>';
     return;
   }
+
   list.innerHTML = conversations.map(c => {
     const initials = (c.customer_name || c.customer_phone || '?').charAt(0).toUpperCase();
-    const time = c.last_message_time ? new Date(c.last_message_time).toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}) : '';
-    const lastMsg = (c.last_message || 'No messages').substring(0, 40);
-    return `<div onclick="openConversation(${c.id},'${(c.customer_name||'').replace(/'/g,"\\'")}','${c.customer_phone}')"
-      style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px;transition:background 0.15s;"
-      onmouseover="this.style.background='var(--gll)'" onmouseout="this.style.background='white'">
-      <div style="width:42px;height:42px;background:var(--g);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0;">${initials}</div>
+    const time = c.last_message_time
+      ? new Date(c.last_message_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const lastMsg = (c.last_message || '').substring(0, 38);
+    const isActive = c.customer_phone === activePhone;
+    const unread = (c.unread_count > 0) && !isActive;
+
+    return `
+    <div onclick="openConversation(${c.id},'${(c.customer_name||'').replace(/'/g,"\\'")}','${c.customer_phone}')"
+      style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;
+             display:flex;align-items:center;gap:10px;transition:background 0.15s;
+             background:${isActive ? 'var(--gll)' : unread ? '#fffbeb' : 'white'};"
+      onmouseover="this.style.background='var(--gll)'"
+      onmouseout="this.style.background='${isActive ? 'var(--gll)' : unread ? '#fffbeb' : 'white'}'">
+      <div style="position:relative;flex-shrink:0;">
+        <div style="width:42px;height:42px;background:var(--g);border-radius:50%;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:16px;font-weight:700;color:white;">${initials}</div>
+        ${unread ? `<div style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;
+                    background:#25d366;border-radius:50%;border:2px solid white;"></div>` : ''}
+      </div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-          <span style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${c.customer_name || c.customer_phone}</span>
-          <span style="font-size:11px;color:var(--muted);flex-shrink:0;">${time}</span>
+          <span style="font-size:14px;font-weight:${unread ? 700 : 600};color:var(--text);
+                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px;">
+            ${c.customer_name || c.customer_phone}
+          </span>
+          <span style="font-size:11px;color:${unread ? 'var(--g)' : 'var(--muted)'};
+                       flex-shrink:0;font-weight:${unread ? 700 : 400};">${time}</span>
         </div>
-        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lastMsg}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:${unread ? '#111' : 'var(--muted)'};
+                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                       font-weight:${unread ? 600 : 400};flex:1;">${lastMsg}</span>
+          ${unread ? `<span style="background:var(--g);color:white;border-radius:10px;
+                      min-width:18px;height:18px;display:inline-flex;align-items:center;
+                      justify-content:center;font-size:10px;font-weight:700;
+                      padding:0 5px;margin-left:6px;flex-shrink:0;">${c.unread_count}</span>` : ''}
+        </div>
       </div>
     </div>`;
   }).join('');
 }
 
+// ═══ FILTER ═══
 function filterContacts(query) {
-  const filtered = allConversations.filter(c =>
-    (c.customer_name||'').toLowerCase().includes(query.toLowerCase()) ||
-    (c.customer_phone||'').includes(query)
-  );
-  renderContacts(filtered);
+  const q = query.toLowerCase();
+  renderContacts(allConversations.filter(c =>
+    (c.customer_name||'').toLowerCase().includes(q) || (c.customer_phone||'').includes(q)
+  ));
 }
 
-function stopConversationPolling() {
-  if (conversationPollTimer) clearInterval(conversationPollTimer);
-  conversationPollTimer = null;
-}
-
-function startConversationPolling(phone) {
-  stopConversationPolling();
-  conversationPollTimer = setInterval(() => loadMessages(phone, true), 1000);
-}
-
-async function loadMessages(phone, silent = false) {
-  const msgList = document.getElementById('messages-list');
-  if (!silent) {
-    msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Loading messages...</div>';
-  }
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?order=timestamp.asc`, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
-    });
-    const messages = await res.json();
-
-    // Only re-render if new messages arrived
-    if (silent && messages.length === lastMessageCount) return;
-    lastMessageCount = messages.length;
-
-    const wasAtBottom = msgList.scrollTop + msgList.clientHeight >= msgList.scrollHeight - 30;
-
-    if (!messages.length) {
-      msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">No messages found.</div>';
-      return;
-    }
-
-    msgList.innerHTML = messages.map(m => {
-      const isCustomer = m.sender === 'customer';
-      const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}) : '';
-      return `<div style="display:flex;justify-content:${isCustomer?'flex-start':'flex-end'};margin-bottom:6px;">
-        <div style="max-width:65%;background:${isCustomer?'white':'#dcf8c6'};border-radius:${isCustomer?'0 8px 8px 8px':'8px 0 8px 8px'};padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.1);">
-          <div style="font-size:13px;color:#0a1a14;line-height:1.5;">${m.content||''}</div>
-          <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px;">${time}${!isCustomer?' ✓✓':''}</div>
-        </div>
-      </div>`;
-    }).join('');
-
-    if (!silent || wasAtBottom) {
-      msgList.scrollTop = msgList.scrollHeight;
-    }
-  } catch(e) {
-    if (!silent) msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Could not load messages.</div>';
-  }
-}
-
+// ═══ OPEN CONVERSATION ═══
 async function openConversation(id, name, phone) {
-  activeConversationId = id;
-  activeConversationPhone = phone;
-  activeConversationName = name;
-  lastMessageCount = 0;
+  activeId = id;
+  activePhone = phone;
+  lastMsgTimestamp = null;
 
   document.getElementById('chat-empty').style.display = 'none';
   document.getElementById('chat-header').style.display = 'flex';
-  document.getElementById('messages-list').style.display = 'flex';
-  document.getElementById('messages-list').style.flexDirection = 'column';
+  const ml = document.getElementById('messages-list');
+  ml.style.display = 'flex';
+  ml.style.flexDirection = 'column';
 
   document.getElementById('chat-name').textContent = name || phone;
   document.getElementById('chat-phone').textContent = '+' + phone;
   document.getElementById('chat-avatar').textContent = (name || phone).charAt(0).toUpperCase();
 
+  // Mark read immediately in UI
+  const conv = allConversations.find(c => c.id === id);
+  if (conv) conv.unread_count = 0;
+  renderContacts(allConversations);
+
+  // Mark read in Supabase (fire and forget)
+  SB(`/rest/v1/conversations?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ unread_count: 0, is_read: true })
+  }).catch(() => {});
+
   await loadMessages(phone, false);
-  startConversationPolling(phone);
+  startMsgPolling(phone);
+}
+
+// ═══ LOAD MESSAGES ═══
+async function loadMessages(phone, silent = false) {
+  const ml = document.getElementById('messages-list');
+  if (!silent) {
+    ml.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Loading...</div>';
+  }
+
+  try {
+    const res = await SB(`/rest/v1/messages?order=timestamp.asc`);
+    const messages = await res.json();
+
+    const latest = messages.length ? messages[messages.length - 1].timestamp : null;
+    if (silent && latest === lastMsgTimestamp) return;
+    lastMsgTimestamp = latest;
+
+    const atBottom = ml.scrollTop + ml.clientHeight >= ml.scrollHeight - 40;
+
+    if (!messages.length) {
+      ml.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">No messages yet.</div>';
+      return;
+    }
+
+    ml.innerHTML = messages.map(m => {
+      const isCustomer = m.sender === 'customer';
+      const time = m.timestamp
+        ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      return `
+      <div style="display:flex;justify-content:${isCustomer ? 'flex-start' : 'flex-end'};margin-bottom:6px;">
+        <div style="max-width:65%;background:${isCustomer ? 'white' : '#dcf8c6'};
+                    border-radius:${isCustomer ? '0 8px 8px 8px' : '8px 0 8px 8px'};
+                    padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
+          <div style="font-size:13px;color:#0a1a14;line-height:1.5;word-break:break-word;">${m.content || ''}</div>
+          <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px;">
+            ${time}${!isCustomer ? ' <span style="color:#53bdeb;">✓✓</span>' : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    if (!silent || atBottom) ml.scrollTop = ml.scrollHeight;
+  } catch(e) {
+    if (!silent) ml.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Could not load messages.</div>';
+  }
 }
 </script>
 </body>
