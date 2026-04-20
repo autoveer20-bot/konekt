@@ -794,6 +794,14 @@ function showScreen(name) {
 
   const titles = { dashboard: 'Dashboard', inbox: 'Inbox', billing: 'Billing & Plans' };
   document.getElementById('topbar-title').textContent = titles[name] || name;
+
+  if (name === 'inbox') {
+    loadConversations();
+    startInboxPolling();
+  } else {
+    stopInboxPolling();
+    stopConversationPolling();
+  }
 }
 
 // ═══ PRICING ACTIONS ═══
@@ -818,23 +826,45 @@ function logout() {
 
 // ═══ INBOX ═══
 let allConversations = [];
+let activeConversationPhone = null;
+let activeConversationName = null;
+let activeConversationId = null;
+let conversationPollTimer = null;
+let inboxPollTimer = null;
+let lastMessageCount = 0;
+let lastConversationCount = 0;
 
-async function loadConversations() {
+async function loadConversations(silent = false) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=*&order=last_message_time.desc&customer_phone=not.is.null`, {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
     });
     const data = await res.json();
     const seen = {};
-    allConversations = data.filter(c => {
+    const fresh = data.filter(c => {
       if (seen[c.customer_phone]) return false;
       seen[c.customer_phone] = true;
       return true;
     });
-    renderContacts(allConversations);
+
+    // Only re-render if data changed
+    if (!silent || JSON.stringify(fresh) !== JSON.stringify(allConversations)) {
+      allConversations = fresh;
+      renderContacts(allConversations);
+    }
   } catch(e) {
-    document.getElementById('contacts-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load.</div>';
+    if (!silent) document.getElementById('contacts-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Could not load.</div>';
   }
+}
+
+function startInboxPolling() {
+  if (inboxPollTimer) clearInterval(inboxPollTimer);
+  inboxPollTimer = setInterval(() => loadConversations(true), 1000);
+}
+
+function stopInboxPolling() {
+  if (inboxPollTimer) clearInterval(inboxPollTimer);
+  inboxPollTimer = null;
 }
 
 function renderContacts(conversations) {
@@ -870,24 +900,32 @@ function filterContacts(query) {
   renderContacts(filtered);
 }
 
-async function openConversation(id, name, phone) {
-  document.getElementById('chat-empty').style.display = 'none';
-  document.getElementById('chat-header').style.display = 'flex';
-  document.getElementById('messages-list').style.display = 'flex';
-  document.getElementById('messages-list').style.flexDirection = 'column';
+function stopConversationPolling() {
+  if (conversationPollTimer) clearInterval(conversationPollTimer);
+  conversationPollTimer = null;
+}
 
-  document.getElementById('chat-name').textContent = name || phone;
-  document.getElementById('chat-phone').textContent = '+' + phone;
-  document.getElementById('chat-avatar').textContent = (name || phone).charAt(0).toUpperCase();
+function startConversationPolling(phone) {
+  stopConversationPolling();
+  conversationPollTimer = setInterval(() => loadMessages(phone, true), 1000);
+}
 
+async function loadMessages(phone, silent = false) {
   const msgList = document.getElementById('messages-list');
-  msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Loading messages...</div>';
-
+  if (!silent) {
+    msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Loading messages...</div>';
+  }
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?order=timestamp.asc`, {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
     });
     const messages = await res.json();
+
+    // Only re-render if new messages arrived
+    if (silent && messages.length === lastMessageCount) return;
+    lastMessageCount = messages.length;
+
+    const wasAtBottom = msgList.scrollTop + msgList.clientHeight >= msgList.scrollHeight - 30;
 
     if (!messages.length) {
       msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">No messages found.</div>';
@@ -905,10 +943,31 @@ async function openConversation(id, name, phone) {
       </div>`;
     }).join('');
 
-    msgList.scrollTop = msgList.scrollHeight;
+    if (!silent || wasAtBottom) {
+      msgList.scrollTop = msgList.scrollHeight;
+    }
   } catch(e) {
-    msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Could not load messages.</div>';
+    if (!silent) msgList.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px;">Could not load messages.</div>';
   }
+}
+
+async function openConversation(id, name, phone) {
+  activeConversationId = id;
+  activeConversationPhone = phone;
+  activeConversationName = name;
+  lastMessageCount = 0;
+
+  document.getElementById('chat-empty').style.display = 'none';
+  document.getElementById('chat-header').style.display = 'flex';
+  document.getElementById('messages-list').style.display = 'flex';
+  document.getElementById('messages-list').style.flexDirection = 'column';
+
+  document.getElementById('chat-name').textContent = name || phone;
+  document.getElementById('chat-phone').textContent = '+' + phone;
+  document.getElementById('chat-avatar').textContent = (name || phone).charAt(0).toUpperCase();
+
+  await loadMessages(phone, false);
+  startConversationPolling(phone);
 }
 </script>
 </body>
