@@ -953,7 +953,7 @@ async function loadMessages(phone, silent = false) {
   }
 
   try {
-    const res = await SB(`/rest/v1/messages?order=timestamp.asc`);
+    const res = await SB(`/rest/v1/messages?customer_phone=eq.${phone}&order=timestamp.asc`);
     const messages = await res.json();
 
     const latest = messages.length ? messages[messages.length - 1].timestamp : null;
