@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Konekt — Login & Signup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --g: #1D9E75;
+  --gd: #0F6E56;
+  --gl: #d4f0e6;
+  --gll: #f0fdf9;
+  --white: #ffffff;
+  --bg: #f8fafb;
+  --text: #0d1f1a;
+  --text2: #2d4a3e;
+  --muted: #6b8a7a;
+  --border: #e2ece8;
+  --border2: #c5dfd4;
+  --red: #ef4444;
+  --redl: #fef2f2;
+  --amber: #f59e0b;
+  --amberl: #fffbeb;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 50px 50px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+body::after {
+  content: '';
+  position: fixed;
+  top: -100px; left: 50%;
+  transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(29,158,117,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* AUTH CARD */
+.auth-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-decoration: none;
+  margin-bottom: 28px;
+}
+.auth-logo-mark {
+  width: 40px; height: 40px;
+  background: var(--g);
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+}
+.auth-logo-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+.auth-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 36px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+.auth-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+.auth-sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 28px;
+  line-height: 1.6;
+}
+
+/* FORM */
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 7px;
+}
+.form-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  background: var(--white);
+  transition: border 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.form-input:focus {
+  border-color: var(--g);
+  box-shadow: 0 0 0 3px rgba(29,158,117,0.1);
+}
+.form-input::placeholder { color: #aab8b3; }
+
+/* OTP INPUT */
+.otp-wrap {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.otp-input {
+  width: 52px; height: 58px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+  background: var(--white);
+  outline: none;
+  transition: border 0.15s, box-shadow 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+.otp-input:focus {
+  border-color: var(--g);
+  box-shadow: 0 0 0 3px rgba(29,158,117,0.1);
+}
+
+/* PASSWORD STRENGTH */
+.password-strength {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.strength-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.strength-bar.weak { background: var(--red); }
+.strength-bar.medium { background: var(--amber); }
+.strength-bar.strong { background: var(--g); }
+
+/* BUTTONS */
+.btn-primary {
+  width: 100%;
+  padding: 13px;
+  background: var(--g);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.btn-primary:hover { background: var(--gd); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(29,158,117,0.3); }
+.btn-primary:disabled { background: #a7d9c8; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-outline {
+  width: 100%;
+  padding: 13px;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+  margin-top: 10px;
+}
+.btn-outline:hover { background: var(--gll); border-color: var(--g); color: var(--g); }
+
+/* ALERTS */
+.alert {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 18px;
+  display: none;
+  align-items: center;
+  gap: 9px;
+  line-height: 1.5;
+}
+.alert.show { display: flex; }
+.alert-error { background: var(--redl); color: #991b1b; border: 1px solid #fecaca; }
+.alert-success { background: var(--gll); color: var(--gd); border: 1px solid var(--gl); }
+.alert-info { background: var(--amberl); color: #92400e; border: 1px solid #fde68a; }
+
+/* DIVIDER */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* LINKS */
+.auth-link {
+  color: var(--g);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.auth-link:hover { color: var(--gd); text-decoration: underline; }
+
+.auth-footer {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* SPINNER */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* SCREENS */
+.screen { display: none; }
+.screen.active { display: block; animation: fadeUp 0.3s ease; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+/* PASSWORD TOGGLE */
+.input-wrap { position: relative; }
+.input-wrap .form-input { padding-right: 42px; }
+.pw-toggle {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.pw-toggle:hover { color: var(--text); }
+
+/* BACK BTN */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 20px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  transition: color 0.15s;
+}
+.back-btn:hover { color: var(--g); }
+
+/* SUCCESS SCREEN */
+.success-icon {
+  width: 64px; height: 64px;
+  background: var(--gll);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  border: 2px solid var(--gl);
+}
+
+/* CONSULTANT BOX */
+.consultant-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.consultant-box p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.consultant-box a { color: var(--g); font-weight: 500; text-decoration: none; }
+.consultant-box a:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  .auth-card { padding: 24px 20px; }
+  .otp-input { width: 44px; height: 50px; font-size: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="auth-wrap">
+
+  <!-- Logo -->
+  <a href="index.html" class="auth-logo">
+    <div class="auth-logo-mark">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M6 4V20M6 12L16 4M6 12L16 20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="18" cy="4" r="2.5" fill="#9FE1CB"/>
+        <circle cx="18" cy="20" r="2.5" fill="#9FE1CB"/>
+      </svg>
+    </div>
+    <span class="auth-logo-name">Konekt</span>
+  </a>
+
+  <div class="auth-card">
+
+    <!-- ═══ SCREEN 1: LOGIN ═══ -->
+    <div class="screen active" id="screen-login">
+      <h1 class="auth-title">Welcome back</h1>
+      <p class="auth-sub">Login to your Konekt account</p>
+
+      <div class="alert alert-error" id="login-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+        <span id="login-error-msg">Invalid credentials.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" id="login-email" placeholder="you@example.com">
+      </div>
+
+      <div class="form-group">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;">
+          <label class="form-label" style="margin:0;">Password</label>
+          <a class="auth-link" style="font-size:13px;" onclick="showScreen('screen-forgot')">Forgot password?</a>
+        </div>
+        <div class="input-wrap">
+          <input type="password" class="form-input" id="login-password" placeholder="Enter your password">
+          <button class="pw-toggle" onclick="togglePw('login-password', this)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="login-btn" onclick="doLogin()">
+        Login to Konekt
+      </button>
+
+      <div class="divider">or</div>
+
+      <div class="auth-footer" style="margin-top:0;">
+        Don't have an account? <a class="auth-link" onclick="showScreen('screen-signup')">Sign up now</a>
+      </div>
+
+      <!-- Consultant -->
+      <div class="consultant-box">
+        <svg width="20" height="20" fill="none" stroke="var(--g)" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+        <p>Need help? <a href="https://wa.me/919958044308?text=Hi%20Konekt%2C%20I%20need%20help%20with%20my%20account." target="_blank">Contact our consultant</a> on WhatsApp.</p>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN 2: SIGNUP ═══ -->
+    <div class="screen" id="screen-signup">
+      <h1 class="auth-title">Create account</h1>
+      <p class="auth-sub">Join Konekt — your WhatsApp business platform</p>
+
+      <div class="alert alert-error" id="signup-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+        <span id="signup-error-msg">Something went wrong.</span>
+      </div>
+
+      <div class="alert alert-info" id="signup-family">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        <span>It seems you're already in our family! <a class="auth-link" onclick="showScreen('screen-login')">Try logging in.</a></span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-input" id="signup-name" placeholder="Prashant Sharma">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" id="signup-email" placeholder="you@example.com">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Phone Number</label>
+        <input type="tel" class="form-input" id="signup-phone" placeholder="+91 99580 44308">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Business Name</label>
+        <input type="text" class="form-input" id="signup-business" placeholder="Your Business Name">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="input-wrap">
+          <input type="password" class="form-input" id="signup-password" placeholder="Min. 6 characters" oninput="checkStrength(this.value)">
+          <button class="pw-toggle" onclick="togglePw('signup-password', this)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+        <div class="password-strength">
+          <div class="strength-bar" id="sb1"></div>
+          <div class="strength-bar" id="sb2"></div>
+          <div class="strength-bar" id="sb3"></div>
+          <div class="strength-bar" id="sb4"></div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="signup-btn" onclick="doSignup()">
+        Create Account
+      </button>
+
+      <div class="auth-footer">
+        Already have an account? <a class="auth-link" onclick="showScreen('screen-login')">Login</a>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN 3: OTP VERIFY ═══ -->
+    <div class="screen" id="screen-otp">
+      <button class="back-btn" onclick="showScreen('screen-signup')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+
+      <h1 class="auth-title">Verify your email</h1>
+      <p class="auth-sub">We sent a 6-digit code to <strong id="otp-email-display"></strong></p>
+
+      <div class="alert alert-error" id="otp-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+        <span id="otp-error-msg">Invalid OTP.</span>
+      </div>
+
+      <div style="margin: 24px 0;">
+        <div class="otp-wrap">
+          <input class="otp-input" type="text" maxlength="1" id="otp1" oninput="otpMove(this, null, 'otp2')">
+          <input class="otp-input" type="text" maxlength="1" id="otp2" oninput="otpMove(this, 'otp1', 'otp3')">
+          <input class="otp-input" type="text" maxlength="1" id="otp3" oninput="otpMove(this, 'otp2', 'otp4')">
+          <input class="otp-input" type="text" maxlength="1" id="otp4" oninput="otpMove(this, 'otp3', 'otp5')">
+          <input class="otp-input" type="text" maxlength="1" id="otp5" oninput="otpMove(this, 'otp4', 'otp6')">
+          <input class="otp-input" type="text" maxlength="1" id="otp6" oninput="otpMove(this, 'otp5', null)">
+        </div>
+        <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:12px;">
+          Code valid for 10 minutes
+        </p>
+      </div>
+
+      <button class="btn-primary" id="otp-btn" onclick="doVerifyOtp()">
+        Verify & Continue
+      </button>
+    </div>
+
+    <!-- ═══ SCREEN 4: FORGOT PASSWORD ═══ -->
+    <div class="screen" id="screen-forgot">
+      <button class="back-btn" onclick="showScreen('screen-login')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back to Login
+      </button>
+
+      <h1 class="auth-title">Forgot password?</h1>
+      <p class="auth-sub">Enter your email and we'll send you a reset link.</p>
+
+      <div class="alert alert-error" id="forgot-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+        <span id="forgot-error-msg">No account found.</span>
+      </div>
+
+      <div class="alert alert-success" id="forgot-success">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <span>Reset link sent! Check your email inbox.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" id="forgot-email" placeholder="you@example.com">
+      </div>
+
+      <button class="btn-primary" id="forgot-btn" onclick="doForgotPassword()">
+        Send Reset Link
+      </button>
+
+      <div class="divider">or</div>
+
+      <!-- Consultant option -->
+      <div class="consultant-box">
+        <svg width="20" height="20" fill="none" stroke="var(--g)" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+        <p>Still stuck? <a href="https://wa.me/919958044308?text=Hi%20Konekt%2C%20I%20forgot%20my%20password%20and%20need%20help." target="_blank">Contact our consultant</a> — we'll help you get back in.</p>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN 5: RESET PASSWORD ═══ -->
+    <div class="screen" id="screen-reset">
+      <h1 class="auth-title">Set new password</h1>
+      <p class="auth-sub">Choose a strong password for your account.</p>
+
+      <div class="alert alert-error" id="reset-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+        <span id="reset-error-msg">Something went wrong.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <div class="input-wrap">
+          <input type="password" class="form-input" id="reset-password" placeholder="Min. 6 characters" oninput="checkStrength(this.value)">
+          <button class="pw-toggle" onclick="togglePw('reset-password', this)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+        <div class="password-strength">
+          <div class="strength-bar" id="rsb1"></div>
+          <div class="strength-bar" id="rsb2"></div>
+          <div class="strength-bar" id="rsb3"></div>
+          <div class="strength-bar" id="rsb4"></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-input" id="reset-confirm" placeholder="Repeat your password">
+      </div>
+
+      <button class="btn-primary" id="reset-btn" onclick="doResetPassword()">
+        Update Password
+      </button>
+    </div>
+
+    <!-- ═══ SCREEN 6: SUCCESS ═══ -->
+    <div class="screen" id="screen-success">
+      <div style="text-align:center; padding: 20px 0;">
+        <div class="success-icon">
+          <svg width="28" height="28" fill="none" stroke="var(--g)" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h1 class="auth-title" style="margin-bottom:8px;" id="success-title">Account Verified!</h1>
+        <p class="auth-sub" id="success-msg">Welcome to Konekt. Redirecting you to dashboard...</p>
+        <button class="btn-primary" onclick="showScreen('screen-login')" style="margin-top:8px;">
+          Go to Login
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom note -->
+  <p style="text-align:center; font-size:12px; color:var(--muted); margin-top:20px;">
+    A product by <strong style="color:var(--text2);">PilotCloud</strong> &nbsp;·&nbsp;
+    <a href="privacy-policy.html" style="color:var(--muted); text-decoration:none;">Privacy Policy</a> &nbsp;·&nbsp;
+    <a href="terms-of-service.html" style="color:var(--muted); text-decoration:none;">Terms of Service</a>
+  </p>
+
+</div>
+
+<script>
+// ═══ WEBHOOKS ═══
+const WH = {
+  signup:         'https://aryanppcpilotcloud.app.n8n.cloud/webhook/auth-signup',
+  verifyOtp:      'https://aryanppcpilotcloud.app.n8n.cloud/webhook/auth-verify-otp',
+  login:          'https://aryanppcpilotcloud.app.n8n.cloud/webhook/auth-login',
+  forgotPassword: 'https://aryanppcpilotcloud.app.n8n.cloud/webhook/auth-forgot-password',
+  resetPassword:  'https://aryanppcpilotcloud.app.n8n.cloud/webhook/auth-reset-password',
+};
+
+// State
+let currentEmail = '';
+
+// Check URL for reset token
+window.addEventListener('load', () => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  const email = params.get('email');
+  if (token && email) {
+    window._resetToken = token;
+    window._resetEmail = email;
+    showScreen('screen-reset');
+  }
+});
+
+// ═══ NAVIGATION ═══
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  hideAllAlerts();
+}
+
+function hideAllAlerts() {
+  document.querySelectorAll('.alert').forEach(a => a.classList.remove('show'));
+}
+
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('show'); }
+  const msgEl = document.getElementById(id + '-msg');
+  if (msgEl && msg) msgEl.textContent = msg;
+}
+
+// ═══ UTILS ═══
+function togglePw(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>`;
+  } else {
+    input.type = 'password';
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`;
+  }
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    btn._orig = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner"></div> Please wait...';
+  } else {
+    btn.innerHTML = btn._orig || btn.innerHTML;
+  }
+}
+
+function checkStrength(pw) {
+  const bars = ['sb1','sb2','sb3','sb4'];
+  const rbars = ['rsb1','rsb2','rsb3','rsb4'];
+  let score = 0;
+  if (pw.length >= 6) score++;
+  if (pw.length >= 10) score++;
+  if (/[A-Z]/.test(pw) || /[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  const cls = score <= 1 ? 'weak' : score <= 2 ? 'medium' : 'strong';
+  [...bars, ...rbars].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const idx = i % 4;
+    el.className = 'strength-bar' + (idx < score ? ' ' + cls : '');
+  });
+}
+
+// OTP input auto-move
+function otpMove(el, prevId, nextId) {
+  el.value = el.value.replace(/[^0-9]/g, '');
+  if (el.value && nextId) document.getElementById(nextId)?.focus();
+  if (!el.value && prevId) document.getElementById(prevId)?.focus();
+}
+
+function getOtpValue() {
+  return ['otp1','otp2','otp3','otp4','otp5','otp6'].map(id => document.getElementById(id)?.value || '').join('');
+}
+
+// ═══ API CALLS ═══
+
+// LOGIN
+async function doLogin() {
+  hideAllAlerts();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+
+  if (!email || !password) {
+    showAlert('login-error', 'Please enter your email and password.');
+    return;
+  }
+
+  setLoading('login-btn', true);
+  try {
+    const res = await fetch(WH.login, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ email, password })
+    });
+    const text = await res.text(); const data = JSON.parse(text);
+
+    if (data.success) {
+      // Save user session
+      localStorage.setItem('konekt_user', JSON.stringify(data.user));
+      // Redirect to dashboard
+      window.location.href = 'konekt-dashboard.html';
+    } else {
+      showAlert('login-error', data.message || 'Invalid credentials.');
+    }
+  } catch (e) {
+    showAlert('login-error', 'Connection error. Please try again.');
+  } finally {
+    setLoading('login-btn', false);
+  }
+}
+
+// SIGNUP
+async function doSignup() {
+  hideAllAlerts();
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const phone = document.getElementById('signup-phone').value.trim();
+  const business_name = document.getElementById('signup-business').value.trim();
+  const password = document.getElementById('signup-password').value.trim();
+
+  if (!name || !email || !password) {
+    showAlert('signup-error', 'Please fill all required fields.');
+    return;
+  }
+  if (password.length < 6) {
+    showAlert('signup-error', 'Password must be at least 6 characters.');
+    return;
+  }
+
+  setLoading('signup-btn', true);
+  try {
+    const res = await fetch(WH.signup, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ name, email, phone, business_name, password })
+    });
+    const text = await res.text(); const data = JSON.parse(text);
+
+    if (data.success && data.code === 'OTP_SENT') {
+      currentEmail = email;
+      document.getElementById('otp-email-display').textContent = email;
+      showScreen('screen-otp');
+    } else if (data.code === 'ALREADY_EXISTS') {
+      document.getElementById('signup-family').classList.add('show');
+    } else {
+      showAlert('signup-error', data.message || 'Signup failed. Please try again.');
+    }
+  } catch (e) {
+    showAlert('signup-error', 'Connection error. Please try again.');
+  } finally {
+    setLoading('signup-btn', false);
+  }
+}
+
+// VERIFY OTP
+async function doVerifyOtp() {
+  hideAllAlerts();
+  const otp = getOtpValue();
+  if (otp.length !== 6) {
+    showAlert('otp-error', 'Please enter the complete 6-digit code.');
+    return;
+  }
+
+  setLoading('otp-btn', true);
+  try {
+    const res = await fetch(WH.verifyOtp, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ email: currentEmail, otp })
+    });
+    const text = await res.text(); const data = JSON.parse(text);
+
+    if (data.success) {
+      document.getElementById('success-title').textContent = 'Account Verified!';
+      document.getElementById('success-msg').textContent = 'Welcome to Konekt! Your account is ready. Please login to continue.';
+      showScreen('screen-success');
+    } else {
+      showAlert('otp-error', data.message || 'Invalid OTP. Please try again.');
+    }
+  } catch (e) {
+    showAlert('otp-error', 'Connection error. Please try again.');
+  } finally {
+    setLoading('otp-btn', false);
+  }
+}
+
+// FORGOT PASSWORD
+async function doForgotPassword() {
+  hideAllAlerts();
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) {
+    showAlert('forgot-error', 'Please enter your email address.');
+    return;
+  }
+
+  setLoading('forgot-btn', true);
+  try {
+    const res = await fetch(WH.forgotPassword, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ email })
+    });
+    const text = await res.text(); const data = JSON.parse(text);
+
+    if (data.success) {
+      document.getElementById('forgot-success').classList.add('show');
+      document.getElementById('forgot-email').value = '';
+    } else {
+      showAlert('forgot-error', data.message || 'No account found with this email.');
+    }
+  } catch (e) {
+    showAlert('forgot-error', 'Connection error. Please try again.');
+  } finally {
+    setLoading('forgot-btn', false);
+  }
+}
+
+// RESET PASSWORD
+async function doResetPassword() {
+  hideAllAlerts();
+  const new_password = document.getElementById('reset-password').value.trim();
+  const confirm = document.getElementById('reset-confirm').value.trim();
+
+  if (!new_password || !confirm) {
+    showAlert('reset-error', 'Please fill all fields.');
+    return;
+  }
+  if (new_password.length < 6) {
+    showAlert('reset-error', 'Password must be at least 6 characters.');
+    return;
+  }
+  if (new_password !== confirm) {
+    showAlert('reset-error', 'Passwords do not match.');
+    return;
+  }
+
+  setLoading('reset-btn', true);
+  try {
+    const res = await fetch(WH.resetPassword, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        email: window._resetEmail,
+        token: window._resetToken,
+        new_password
+      })
+    });
+    const text = await res.text(); const data = JSON.parse(text);
+
+    if (data.success) {
+      document.getElementById('success-title').textContent = 'Password Updated!';
+      document.getElementById('success-msg').textContent = 'Your password has been changed successfully. Please login with your new password.';
+      showScreen('screen-success');
+    } else {
+      showAlert('reset-error', data.message || 'Reset failed. Please try again.');
+    }
+  } catch (e) {
+    showAlert('reset-error', 'Connection error. Please try again.');
+  } finally {
+    setLoading('reset-btn', false);
+  }
+}
+
+// Enter key support
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const active = document.querySelector('.screen.active')?.id;
+  if (active === 'screen-login') doLogin();
+  else if (active === 'screen-signup') doSignup();
+  else if (active === 'screen-otp') doVerifyOtp();
+  else if (active === 'screen-forgot') doForgotPassword();
+  else if (active === 'screen-reset') doResetPassword();
+});
+</script>
+</body>
+</html>
