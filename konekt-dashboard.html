@@ -741,12 +741,36 @@ body {
 </div>
 
 <script>
-// ═══ N8N WEBHOOK CONFIG ═══
-const N8N = {
-  messages:      'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-messages',
-  conversations: 'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-conversations',
-  stats:         'https://aryanppcpilotcloud.app.n8n.cloud/webhook/get-stats'
-};
+// ═══ GOOGLE SHEETS CSV ═══
+const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vThdvVvLAJ04-EsFvmNlCkm7SdmmiFPBSNkmWncwK7-yj2Oz2WOqJiCy4tmqiuZcrqQsaME1C5gZPBy/pub?output=csv&t=' + Date.now();
+
+// ═══ CSV PARSER ═══
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    // Handle quoted fields with commas inside
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let ch of line) {
+      if (ch === '"') inQ = !inQ;
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    cols.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (cols[i] || '').replace(/^"|"$/g, ''));
+    return obj;
+  }).filter(r => r.phone);
+}
+
+// ═══ FETCH SHEET DATA ═══
+async function fetchSheetData() {
+  const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vThdvVvLAJ04-EsFvmNlCkm7SdmmiFPBSNkmWncwK7-yj2Oz2WOqJiCy4tmqiuZcrqQsaME1C5gZPBy/pub?output=csv&t=' + Date.now();
+  const res = await fetch(url);
+  const text = await res.text();
+  return parseCSV(text);
+}
 
 // ═══ AUTH ═══
 let currentUser = null;
@@ -761,7 +785,6 @@ window.addEventListener('load', async () => {
   document.getElementById('sidebar-name').textContent = name;
   document.getElementById('sidebar-avatar').textContent = name.charAt(0).toUpperCase();
 
-  // Plan badge from localStorage
   if (currentUser.plan) {
     document.getElementById('sidebar-plan').textContent = 'AI Agent Plan';
     document.getElementById('plan-badge').textContent = 'PRO';
@@ -774,22 +797,21 @@ window.addEventListener('load', async () => {
     document.getElementById('plan-badge').className = 'badge-plan badge-free';
   }
 
-  // Load dashboard stats on page load
   loadStats();
 });
 
 // ═══ LOAD STATS ═══
 async function loadStats() {
   try {
-    const res = await fetch(N8N.stats);
-    const data = await res.json();
+    const rows = await fetchSheetData();
+    const today = new Date().toISOString().split('T')[0];
+    const msgsToday = rows.filter(r => r.timestamp && r.timestamp.startsWith(today)).length;
+    const uniqueLeads = new Set(rows.map(r => r.phone)).size;
+    const totalConvs = uniqueLeads;
 
-    // n8n wraps in array sometimes
-    const stats = Array.isArray(data) ? data[0] : data;
-
-    document.getElementById('stat-messages').textContent = stats.messages_today ?? '0';
-    document.getElementById('stat-leads').textContent = stats.leads_captured ?? '0';
-    document.getElementById('stat-convs').textContent = stats.total_conversations ?? '—';
+    document.getElementById('stat-messages').textContent = msgsToday || '0';
+    document.getElementById('stat-leads').textContent = uniqueLeads || '0';
+    document.getElementById('stat-convs').textContent = totalConvs || '0';
   } catch(e) {
     console.warn('Stats load failed', e);
   }
@@ -826,7 +848,6 @@ function logout() { localStorage.removeItem('konekt_user'); window.location.href
 // ═══ INBOX STATE ═══
 let allConversations = [];
 let activePhone = null;
-let activeId = null;
 let inboxPollTimer = null;
 let msgPollTimer = null;
 let lastMsgTimestamp = null;
@@ -835,41 +856,34 @@ let lastConvSnapshot = '';
 // ═══ POLLING ═══
 function startInboxPolling() {
   if (inboxPollTimer) clearInterval(inboxPollTimer);
-  inboxPollTimer = setInterval(() => loadConversations(true), 4000);
+  inboxPollTimer = setInterval(() => loadConversations(true), 5000);
 }
 function stopInboxPolling() { clearInterval(inboxPollTimer); inboxPollTimer = null; }
 
 function startMsgPolling(phone) {
   if (msgPollTimer) clearInterval(msgPollTimer);
-  msgPollTimer = setInterval(() => loadMessages(phone, true), 4000);
+  msgPollTimer = setInterval(() => loadMessages(phone, true), 5000);
 }
 function stopMsgPolling() { clearInterval(msgPollTimer); msgPollTimer = null; }
 
 // ═══ LOAD CONVERSATIONS ═══
 async function loadConversations(silent = false) {
   try {
-    const res = await fetch(N8N.conversations);
-    const raw = await res.json();
+    const rows = await fetchSheetData();
 
-    // n8n wraps data: { conversations: [...] } or direct array
-    let data = raw;
-    if (!Array.isArray(raw)) {
-      const inner = Array.isArray(raw) ? raw : (raw[0] || raw);
-      data = inner.conversations || inner.json?.conversations || [];
-    }
-    if (!Array.isArray(data)) data = [];
-
-    // Deduplicate by phone
-    const seen = {};
-    const fresh = data.filter(c => {
-      if (!c.customer_phone || seen[c.customer_phone]) return false;
-      seen[c.customer_phone] = true;
-      return true;
+    // Group by phone — latest message per contact
+    const convMap = {};
+    rows.forEach(r => {
+      if (!convMap[r.phone] || r.timestamp > convMap[r.phone].timestamp) {
+        convMap[r.phone] = r;
+      }
     });
 
-    const snapshot = JSON.stringify(fresh.map(c => ({
-      id: c.id, last: c.last_message_time, unread: c.unread_count, msg: c.last_message
-    })));
+    const fresh = Object.values(convMap).sort((a, b) =>
+      (b.timestamp || '').localeCompare(a.timestamp || '')
+    );
+
+    const snapshot = JSON.stringify(fresh.map(c => ({ p: c.phone, t: c.timestamp, m: c.message })));
     if (silent && snapshot === lastConvSnapshot) return;
     lastConvSnapshot = snapshot;
 
@@ -890,46 +904,34 @@ function renderContacts(conversations) {
   }
 
   list.innerHTML = conversations.map(c => {
-    const initials = (c.customer_name || c.customer_phone || '?').charAt(0).toUpperCase();
-    const time = c.last_message_time
-      ? new Date(c.last_message_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    const displayName = c.name || c.phone || '?';
+    const initials = displayName.charAt(0).toUpperCase();
+    const time = c.timestamp
+      ? new Date(c.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       : '';
-    const lastMsg = (c.last_message || '').substring(0, 38);
-    const isActive = c.customer_phone === activePhone;
-    const unread = (c.unread_count > 0) && !isActive;
+    const lastMsg = (c.message || '').substring(0, 38);
+    const isActive = c.phone === activePhone;
 
     return `
-    <div onclick="openConversation(${c.id},'${(c.customer_name||'').replace(/'/g,"\\'")}','${c.customer_phone}')"
+    <div onclick="openConversation('${c.phone.replace(/'/g,"\\'")}','${displayName.replace(/'/g,"\\'")}')"
       style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;
              display:flex;align-items:center;gap:10px;transition:background 0.15s;
-             background:${isActive ? 'var(--gll)' : unread ? '#fffbeb' : 'white'};"
+             background:${isActive ? 'var(--gll)' : 'white'};"
       onmouseover="this.style.background='var(--gll)'"
-      onmouseout="this.style.background='${isActive ? 'var(--gll)' : unread ? '#fffbeb' : 'white'}'">
-      <div style="position:relative;flex-shrink:0;">
-        <div style="width:42px;height:42px;background:var(--g);border-radius:50%;
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:16px;font-weight:700;color:white;">${initials}</div>
-        ${unread ? `<div style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;
-                    background:#25d366;border-radius:50%;border:2px solid white;"></div>` : ''}
-      </div>
+      onmouseout="this.style.background='${isActive ? 'var(--gll)' : 'white'}'">
+      <div style="width:42px;height:42px;background:var(--g);border-radius:50%;
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:16px;font-weight:700;color:white;flex-shrink:0;">${initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-          <span style="font-size:14px;font-weight:${unread ? 700 : 600};color:var(--text);
+          <span style="font-size:14px;font-weight:600;color:var(--text);
                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px;">
-            ${c.customer_name || c.customer_phone}
+            ${displayName}
           </span>
-          <span style="font-size:11px;color:${unread ? 'var(--g)' : 'var(--muted)'};
-                       flex-shrink:0;font-weight:${unread ? 700 : 400};">${time}</span>
+          <span style="font-size:11px;color:var(--muted);flex-shrink:0;">${time}</span>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:12px;color:${unread ? '#111' : 'var(--muted)'};
-                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                       font-weight:${unread ? 600 : 400};flex:1;">${lastMsg}</span>
-          ${unread ? `<span style="background:var(--g);color:white;border-radius:10px;
-                      min-width:18px;height:18px;display:inline-flex;align-items:center;
-                      justify-content:center;font-size:10px;font-weight:700;
-                      padding:0 5px;margin-left:6px;flex-shrink:0;">${c.unread_count}</span>` : ''}
-        </div>
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;
+                     text-overflow:ellipsis;display:block;">${lastMsg}</span>
       </div>
     </div>`;
   }).join('');
@@ -939,13 +941,12 @@ function renderContacts(conversations) {
 function filterContacts(query) {
   const q = query.toLowerCase();
   renderContacts(allConversations.filter(c =>
-    (c.customer_name||'').toLowerCase().includes(q) || (c.customer_phone||'').includes(q)
+    (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)
   ));
 }
 
 // ═══ OPEN CONVERSATION ═══
-async function openConversation(id, name, phone) {
-  activeId = id;
+async function openConversation(phone, name) {
   activePhone = phone;
   lastMsgTimestamp = null;
 
@@ -960,11 +961,7 @@ async function openConversation(id, name, phone) {
   document.getElementById('chat-phone').textContent = '+' + phone;
   document.getElementById('chat-avatar').textContent = (name || phone).charAt(0).toUpperCase();
 
-  // Mark read in UI
-  const conv = allConversations.find(c => c.id === id);
-  if (conv) conv.unread_count = 0;
   renderContacts(allConversations);
-
   await loadMessages(phone, false);
   startMsgPolling(phone);
 }
@@ -977,20 +974,8 @@ async function loadMessages(phone, silent = false) {
   }
 
   try {
-    const res = await fetch(`${N8N.messages}?phone=${phone}`);
-    const raw = await res.json();
-
-    // Handle n8n response shape: [{json:{messages:[...]}}] or {messages:[...]} or [...]
-    let messages = [];
-    if (Array.isArray(raw)) {
-      const first = raw[0];
-      if (first?.json?.messages) messages = first.json.messages;
-      else if (first?.messages) messages = first.messages;
-      else if (first?.content) messages = raw; // direct array of messages
-      else messages = raw;
-    } else if (raw?.messages) {
-      messages = raw.messages;
-    }
+    const rows = await fetchSheetData();
+    const messages = rows.filter(r => r.phone === phone);
 
     const latest = messages.length ? messages[messages.length - 1].timestamp : null;
     if (silent && latest === lastMsgTimestamp) return;
@@ -1013,7 +998,7 @@ async function loadMessages(phone, silent = false) {
         <div style="max-width:65%;background:${isCustomer ? 'white' : '#dcf8c6'};
                     border-radius:${isCustomer ? '0 8px 8px 8px' : '8px 0 8px 8px'};
                     padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
-          <div style="font-size:13px;color:#0a1a14;line-height:1.5;word-break:break-word;">${m.content || ''}</div>
+          <div style="font-size:13px;color:#0a1a14;line-height:1.5;word-break:break-word;">${m.message || ''}</div>
           <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px;">
             ${time}${!isCustomer ? ' <span style="color:#53bdeb;">✓✓</span>' : ''}
           </div>
@@ -1027,50 +1012,29 @@ async function loadMessages(phone, silent = false) {
   }
 }
 
-// ═══ SEND MESSAGE ═══
+// ═══ SEND MESSAGE (read-only for now — sheets is append via n8n) ═══
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text || !activePhone) return;
-
   input.value = '';
-  input.disabled = true;
-  document.getElementById('send-btn').disabled = true;
 
-  // Optimistic UI — show immediately
+  // Show optimistic message
   const ml = document.getElementById('messages-list');
-  const tempId = 'temp-' + Date.now();
   const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   ml.innerHTML += `
-    <div id="${tempId}" style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
       <div style="max-width:65%;background:#dcf8c6;border-radius:8px 0 8px 8px;
                   padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
-        <div style="font-size:13px;color:#0a1a14;line-height:1.5;word-break:break-word;">${text}</div>
+        <div style="font-size:13px;color:#0a1a14;line-height:1.5;">${text}</div>
         <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px;">
           ${now} <span style="color:#53bdeb;">✓✓</span>
         </div>
       </div>
     </div>`;
   ml.scrollTop = ml.scrollHeight;
-
-  try {
-    await fetch(N8N.messages, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: activePhone, message: text, sender: 'agent' })
-    });
-  } catch(e) {
-    // Remove optimistic message on fail
-    document.getElementById(tempId)?.remove();
-    alert('Message send failed. Please try again.');
-  }
-
-  input.disabled = false;
-  document.getElementById('send-btn').disabled = false;
-  input.focus();
 }
 
-// Enter key to send
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('msg-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
